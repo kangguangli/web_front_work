@@ -10,10 +10,10 @@ function init() {
     var onRenderFcts = [];
     var scene = new THREE.Scene();
 
-    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-    camera.position.set(0, 0, 2);
-    scene.add(camera);
+    // camera.position.set(0, 0, 2);
+    // scene.add(camera);
 
     var materials = [];
 
@@ -39,52 +39,26 @@ function init() {
     scene.add(cube);
     cube.position.set(0, 0, 1);
 
-
-    var character = new THREEx.MinecraftChar('resource/zombie.png');
-    scene.add(character.root);
-
-    var controls = new THREEx.MinecraftControls(character);
-    THREEx.MinecraftControls.setKeyboardInput(controls);
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    var character = new player('resource/zombie.png', camera);
+    scene.add(character.model.root);
+    scene.add(camera);
+    var camera_helper = new THREE.CameraHelper(character.camera.root);
+    scene.add(camera_helper);
     onRenderFcts.push(function(delta, now) {
-        controls.update(delta, now);
-    });
-
-    var headAnims = new THREEx.MinecraftCharHeadAnimations(character);
-    headAnims.start('still');
-    onRenderFcts.push(function(delta, now) {
-        headAnims.update(delta, now);
-    });
-
-
-    // init bodyAnims
-    var bodyAnims = new THREEx.MinecraftCharBodyAnimations(character);
-    bodyAnims.start('stand');
-    onRenderFcts.push(function(delta, now) {
-        bodyAnims.update(delta, now);
-    });
-
-    onRenderFcts.push(function(delta, now) {
-        var input = controls.input;
-        if (input.up || input.down) {
-            bodyAnims.start('run');
-        } else if (input.strafeLeft || input.strafeRight) {
-            bodyAnims.start('strafe');
-        } else {
-            bodyAnims.start('stand');
-        }
+        character.update(delta, now);
     });
 
     onRenderFcts.push(function() {
         renderer.render(scene, camera);
+        //renderer.render(scene, camera);
     });
 
     var lastTimeMsec = null;
     requestAnimationFrame(function animate(nowMsec) {
         // keep looping
         requestAnimationFrame(animate);
-        camera.lookAt(character.root.position);
-        camera.position.set(character.root.position.x, character.root.position.y + 2, character.root.position.z - 3);
-        camera.rotation = character.root.rotation;
+
         // measure time
         lastTimeMsec = lastTimeMsec || nowMsec - 1000 / 60
         var deltaMsec = Math.min(200, nowMsec - lastTimeMsec)
@@ -95,6 +69,4 @@ function init() {
         });
     });
 
-
-    renderer.render(scene, camera);
 }
