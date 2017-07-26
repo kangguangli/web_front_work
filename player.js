@@ -32,8 +32,7 @@ var player = function(url_texture, _camera, crafts) {
     this.speed = 2;
     this.angularSpeed = 0.2 * Math.PI * 2;
     this.jump_time = 0;
-    this.jump_duration = 120;
-    this.jumping = false;
+    this.jump_duration = 30;
 
     this.keyUp = function(evt) {
 
@@ -59,7 +58,7 @@ var player = function(url_texture, _camera, crafts) {
                 _player.state.rotation = '';
                 break;
             case _player.keymap.blank:
-                _player.state.jump = '';
+                //_player.state.jump = '';
                 break;
             default:
                 break;
@@ -89,7 +88,8 @@ var player = function(url_texture, _camera, crafts) {
                 _player.state.rotation = 'right';
                 break;
             case _player.keymap.blank:
-                _player.state.jump = 'jump';
+                if (!_player.state.jump)
+                    _player.state.jump = 'jump';
                 break;
             default:
                 break;
@@ -141,17 +141,42 @@ var player = function(url_texture, _camera, crafts) {
 
     this.stateHandle = function(delta, now) {
 
-        _object = this.model.root;
-        _state = this.state;
-
-        var prevPosition = _object.position.clone();
-        var distance = 0;
-
-        if (!hasProp(_state) && !this.jumping) {
+        if (!hasProp(this.state)) {
             this.body_anims.start('stand');
-            if (this.model.root.position.y > 0) {
-                var isGound = false;
-                vertices = [];
+            return;
+        }
+
+        dis = {};
+        dis.x = dis.y = dis.z = 0;
+
+
+
+        switch (this.state.jump) {
+            case 'jump':
+                this.body_anims.start('stand');
+                if (!this.state.forward) {
+                    this.state.forward_jump = 'jump';
+                }
+                this.state.jump = 'jumping';
+                this.jump_time = 0;
+                break;
+            case 'jumping':
+                if (this.jump_time < this.jump_duration) {
+                    dis.y = 0.75 / this.jump_duration;
+                    this.jump_time += 1;
+                    if (this.state.forward) {
+                        this.state.forward_jump = 'jump';
+                    }
+                } else {
+                    this.state.jump = 'fall';
+                    if (this.state.forward_jump) {
+                        dis.z += 0.10;
+                        this.state.forward_jump = '';
+                    }
+                }
+                break;
+            case 'fall':
+                var vertices = [];
                 vertices = vertices.concat(this.model.legL.geometry.vertices);
                 vertices = vertices.concat(this.model.legR.geometry.vertices);
                 for (var v_index = 0; v_index < vertices.length; v_index++) {
@@ -161,99 +186,51 @@ var player = function(url_texture, _camera, crafts) {
 
                     var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
                     var collision_results = ray.intersectObjects(this.crafts);
-                    if (collision_results.length > 0 &&
-                        collision_results[0].distance < direction_vector.length() &&
-                        collision_results[0].object.y >= this.model.root.position.y - 0.25) {
-                        console.log(collision_results[0].object.y);
-                        isGound = true;
-                        break;
+                    if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
+                        if (collision_results[0].object.position.y + 0.25 >= this.model.root.position.y) {
+                            console.log(collision_results[0].object.position.y + 0.25, this.model.root.position.y);
+                            this.state.jump = '';
+                            this.model.root.position.y = collision_results[0].object.position.y + 0.25;
+                            return;
+                        }
                     }
                 }
-
-                console.log(isGound);
-                if (!isGound) {
-                    this.model.root.position.y = -this.speed / 2 * delta;
+                if (this.model.root.position.y > 0) {
+                    dis.y = -0.5 / this.jump_duration;
+                } else {
+                    this.model.root.position.y = 0;
+                    this.state.jump = '';
+                    return;
                 }
-            }
-            return;
+                break;
+            default:
+                break;
         }
 
-        if (_state.jump && !this.jumping) {
-            this.body_anims.start('jump');
-            this.jumping = true;
-        }
-
-        var height = 0;
-        if ((this.jump_time < this.jump_duration / 2) && this.jumping) {
-            this.state.jump = 'jumping';
-            height = +this.speed / 2 * delta;
-            this.jump_time += 1;
-        } else if ((this.jump_time < this.jump_duration) && this.jumping) {
-            this.state.jump = 'falling';
-            this.body_anims.start('fall');
-            height = -this.speed / 2 * delta;
-            this.jump_time += 1;
-        } else {
-            this.body_anims.start('stand');
-            this.state.jump = '';
-            this.jumping = false;
-            this.jump_time = 0;
-        }
-
-        if (height) {
-            if (_state.forward)
-                distance = +this.speed * delta / 2;
-            else
-                distance = 0;
-            var velocity = new THREE.Vector3(0, height, distance);
-            var matrix = new THREE.Matrix4().makeRotationY(_object.rotation.y);
-            velocity.applyMatrix4(matrix);
-            _object.position.add(velocity);
-            return;
-        }
-
-        if (_state.rotation && _state.rotation === 'left')
-            _object.rotation.y += this.angularSpeed * delta;
-        else if (_state.rotation && _state.rotation === 'right')
-            _object.rotation.y -= this.angularSpeed * delta;
-
-
-        distance = 0;
-        if (_state.strafe && _state.strafe === 'left') distance = +this.speed * delta;
-        else if (_state.strafe && _state.strafe === 'right') distance = -this.speed * delta;
-        if (distance) {
-            var velocity = new THREE.Vector3(distance, 0, 0);
-            var matrix = new THREE.Matrix4().makeRotationY(_object.rotation.y);
-            velocity.applyMatrix4(matrix);
-            _object.position.add(velocity);
-        }
-
-        distance = 0;
-        if (_state.forward && _state.forward === 'walk') {
-            distance = +this.speed * delta;
-            this.body_anims.start('walk');
-        } else if (_state.forward && _state.forward === 'run') {
-            distance = +this.speed * delta * 2;
-            this.body_anims.start('run');
-        }
-        if (_state.backward && !this.jumping) {
-            distance = -this.speed * delta;
+        if (!this.state.jump && this.state.forward) {
+            dis.z += (this.state.forward === 'run') ? this.speed * delta * 2 : this.speed * delta;
+            this.body_anims.start(this.state.forward);
+        } else if (this.state.backward) {
+            dis.z -= this.speed * delta;
             this.body_anims.start('walk');
         }
-        if (distance) {
-            var velocity = new THREE.Vector3(0, 0, distance);
-            var matrix = new THREE.Matrix4().makeRotationY(_object.rotation.y);
-            velocity.applyMatrix4(matrix);
-            _object.position.add(velocity);
+
+        if (!this.state.jump && this.state.rotation) {
+            //dis.z = (this.state.forward === 'left') ? this.speed * delta : -this.speed * delta;
+            this.model.root.rotation.y += ((this.state.rotation === 'left') ? this.angularSpeed * delta : -this.angularSpeed * delta);
         }
 
-    };
-
-    this.mouseHandle = function(delta, now) {
+        var velocity = new THREE.Vector3(dis.x, dis.y, dis.z);
+        var matrix = new THREE.Matrix4().makeRotationY(this.model.root.rotation.y);
+        velocity.applyMatrix4(matrix);
+        this.model.root.position.add(velocity);
 
     };
 
     this.collisionDectect = function() {
+
+        var willFall = true;
+
         var vertices = [];
         vertices = vertices.concat(this.model.legL.geometry.vertices);
         vertices = vertices.concat(this.model.legR.geometry.vertices);
@@ -276,31 +253,27 @@ var player = function(url_texture, _camera, crafts) {
                     dir.y = 0;
                     var isFront = dir.dot(forward);
                     isFront = (isFront > 0) ? true : false;
+                    if (this.state.jump || obj.object.position.y + 0.25 <= this.model.root.position.y)
+                        willFall = false;
 
-                    if (this.state.jump === 'falling' &&
-                        obj.object.position.y >= this.model.root.position.y - 0.25) {
-                        this.model.root.position.y = obj.object.position.y + 0.25;
-                        // this.state.jump = '';
-                        // this.jumping = false;
-                        this.jump_time = this.jump_duration + 1;
-                        console.log('jump collision detected');
-                        return;
-                    }
                     if (this.state.forward && isFront &&
-                        obj.object.position.y > this.model.root.position.y - 0.25) {
+                        obj.object.position.y - 0.25 >= this.model.root.position.y) {
                         this.state.forward = '';
-                        console.log('forward collision detected, ', obj.object.position.y, this.model.root.position.y - 0.25);
+                        console.log('f');
                         return;
                     }
                     if (this.state.backward && !isFront &&
-                        obj.object.position.y > this.model.root.position.y - 0.25) {
+                        obj.object.position.y >= this.model.root.position.y + 0.25) {
                         this.state.backward = '';
-                        console.log('backward collision detected', isFront);
+                        console.log('b');
                         return;
                     }
                 }
             }
         }
+
+        if (willFall && this.model.root.position.y > 0 && !this.state.jump)
+            this.state.jump = 'fall';
     };
 
     this.update = function(delta, now) {
