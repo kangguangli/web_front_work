@@ -1,7 +1,7 @@
 var PerspectiveControl = function(_camera, _player) {
     var _this = this;
     this.camera = _camera;
-    this.camera.position.set(0, 0, 0);
+    this.camera.position.set(0, 0, -3);
     this.root = this.camera;
     this.player = _player;
 
@@ -15,8 +15,8 @@ var PerspectiveControl = function(_camera, _player) {
 
         var mouseX = event.pageX - _this.viewHalfX;
         var mouseY = event.pageY - _this.viewHalfY;
-        _this.delta_yaw = mouseX / _this.viewHalfX * Math.PI / 6;
-        _this.delta_pitch = mouseY / _this.viewHalfY * Math.PI / 6;
+        _this.delta_yaw = mouseX / _this.viewHalfX * Math.PI / 4;
+        _this.delta_pitch = mouseY / _this.viewHalfY * Math.PI / 4;
 
         _this.camera.parent.rotation.y = -_this.delta_yaw;
         _this.camera.parent.rotation.x = _this.delta_pitch;

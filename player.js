@@ -24,7 +24,7 @@ var player = function(url_texture, _camera, crafts) {
         blank: ' '.charCodeAt(0),
     };
 
-    this.model.root.position.set(0, 0.5, 0);
+    this.model.root.position.set(0, 0, 0);
     this.model.head.add(_camera);
     this.camera = new PerspectiveControl(_camera, this);
 
@@ -104,7 +104,14 @@ var player = function(url_texture, _camera, crafts) {
         var results = raycaster.intersectObjects(_player.crafts);
         if (results.length > 0 && results[0].distance < 5) {
             if (results[0].object.name === 'block') {
+                console.log('remove');
                 _player.model.root.parent.remove(results[0].object);
+                var index;
+                for (index = 0; index < _player.crafts.length; index++)
+                    if (_player.crafts[index] === results[0].object)
+                        break;
+                if (index < _player.crafts.length)
+                    _player.crafts.splice(index, 1);
             }
         }
 
@@ -127,7 +134,7 @@ var player = function(url_texture, _camera, crafts) {
             }
         }
 
-        event.cancelBubble = true
+        event.cancelBubble = true;
         event.returnValue = false;
         return false; //remove context menu
     };
@@ -142,6 +149,32 @@ var player = function(url_texture, _camera, crafts) {
 
         if (!hasProp(_state) && !this.jumping) {
             this.body_anims.start('stand');
+            if (this.model.root.position.y > 0) {
+                var isGound = false;
+                vertices = [];
+                vertices = vertices.concat(this.model.legL.geometry.vertices);
+                vertices = vertices.concat(this.model.legR.geometry.vertices);
+                for (var v_index = 0; v_index < vertices.length; v_index++) {
+                    var local_v = vertices[v_index];
+                    var global_v = local_v.applyMatrix4(this.model.root.matrix);
+                    var direction_vector = global_v.sub(this.model.root.position);
+
+                    var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
+                    var collision_results = ray.intersectObjects(this.crafts);
+                    if (collision_results.length > 0 &&
+                        collision_results[0].distance < direction_vector.length() &&
+                        collision_results[0].object.y >= this.model.root.position.y - 0.25) {
+                        console.log(collision_results[0].object.y);
+                        isGound = true;
+                        break;
+                    }
+                }
+
+                console.log(isGound);
+                if (!isGound) {
+                    this.model.root.position.y = -this.speed / 2 * delta;
+                }
+            }
             return;
         }
 
@@ -161,15 +194,15 @@ var player = function(url_texture, _camera, crafts) {
             height = -this.speed / 2 * delta;
             this.jump_time += 1;
         } else {
+            this.body_anims.start('stand');
             this.state.jump = '';
             this.jumping = false;
             this.jump_time = 0;
         }
 
         if (height) {
-            console.log(_object.position.x);
             if (_state.forward)
-                distance = +this.speed * delta / 4;
+                distance = +this.speed * delta / 2;
             else
                 distance = 0;
             var velocity = new THREE.Vector3(0, height, distance);
@@ -224,6 +257,10 @@ var player = function(url_texture, _camera, crafts) {
         var vertices = [];
         vertices = vertices.concat(this.model.legL.geometry.vertices);
         vertices = vertices.concat(this.model.legR.geometry.vertices);
+        vertices = vertices.concat(this.model.body.geometry.vertices);
+        vertices = vertices.concat(this.model.head.geometry.vertices);
+        vertices = vertices.concat(this.model.armL.geometry.vertices);
+        vertices = vertices.concat(this.model.armR.geometry.vertices);
         for (var v_index = 0; v_index < vertices.length; v_index++) {
             var local_v = vertices[v_index];
             var global_v = local_v.applyMatrix4(this.model.root.matrix);
@@ -233,22 +270,32 @@ var player = function(url_texture, _camera, crafts) {
             var collision_results = ray.intersectObjects(this.crafts);
             if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
                 for (obj of collision_results) {
+                    var forward = new THREE.Vector3(0, 0, 1);
+                    forward.applyMatrix4(new THREE.Matrix4().makeRotationY(_player.model.root.rotation.y));
+                    var dir = obj.object.position.clone().sub(_player.model.root.position);
+                    dir.y = 0;
+                    var isFront = dir.dot(forward);
+                    isFront = (isFront > 0) ? true : false;
+
                     if (this.state.jump === 'falling' &&
-                        obj.object.position.y >= this.model.root.position.y - 0.75) {
-                        this.state.jump = '';
-                        this.jumping = false;
-                        this.jump_time = 0;
+                        obj.object.position.y >= this.model.root.position.y - 0.25) {
+                        this.model.root.position.y = obj.object.position.y + 0.25;
+                        // this.state.jump = '';
+                        // this.jumping = false;
+                        this.jump_time = this.jump_duration + 1;
                         console.log('jump collision detected');
                         return;
                     }
-                    if (this.state.forward && obj.object.position.y >= this.model.root.position.y - 0.75) {
+                    if (this.state.forward && isFront &&
+                        obj.object.position.y > this.model.root.position.y - 0.25) {
                         this.state.forward = '';
-                        console.log('forward collision detected');
+                        console.log('forward collision detected, ', obj.object.position.y, this.model.root.position.y - 0.25);
                         return;
                     }
-                    if (this.state.backward && obj.object.position.y >= this.model.root.position.y - 0.75) {
+                    if (this.state.backward && !isFront &&
+                        obj.object.position.y > this.model.root.position.y - 0.25) {
                         this.state.backward = '';
-                        console.log('backward collision detected');
+                        console.log('backward collision detected', isFront);
                         return;
                     }
                 }

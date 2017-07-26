@@ -47,6 +47,6 @@ function init() {
 
         renderer.setSize(window.innerWidth, window.innerHeight);
     }
-    document.addEventListener('resize', onWindowResize);
+    window.addEventListener('resize', onWindowResize);
 
 }
