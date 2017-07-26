@@ -1,9 +1,12 @@
-var player = function(url_texture, _camera) {
+var player = function(url_texture, _camera, crafts) {
     var _player = this;
 
     this.model = new THREEx.MinecraftChar(url_texture);
     this.head_anims = new THREEx.MinecraftCharHeadAnimations(this.model);
     this.body_anims = new THREEx.MinecraftCharBodyAnimations(this.model);
+    this.head_anims.start('still');
+
+    this.crafts = crafts;
 
     this.keymap = {
         D: 68,
@@ -21,7 +24,10 @@ var player = function(url_texture, _camera) {
         blank: ' '.charCodeAt(0),
     };
 
-    this.camera = new ThirdPersonCamera(_camera, this);
+    this.model.root.position.set(0, 0.5, 0);
+    this.model.head.add(_camera);
+    this.camera = new PerspectiveControl(_camera, this);
+
     this.state = {};
     this.speed = 2;
     this.angularSpeed = 0.2 * Math.PI * 2;
@@ -90,17 +96,43 @@ var player = function(url_texture, _camera) {
         }
     };
 
-    this.mouseMove = function(evt) {
-        //console.log(evt);
-        var center = { x: window.innerWidth / 2, y: window.innerHeight / 2, };
+    this.leftClick = function(event) {
+        var distance = 5;
+
+        var raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), _player.camera.root);
+        var results = raycaster.intersectObjects(_player.crafts);
+        if (results.length > 0 && results[0].distance < 5) {
+            if (results[0].object.name === 'block') {
+                _player.model.root.parent.remove(results[0].object);
+            }
+        }
 
     };
-    this.leftClick = function(evt) {
+    this.rightClick = function(event) {
+        console.log('right_click');
+        var distance = 5;
 
+        var raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), _player.camera.root);
+        var results = raycaster.intersectObjects(_player.crafts);
+        if (results.length > 0 && results[0].distance < 5) {
+            console.log('results[0]: ', results[0].object.name);
+            if (results[0].object.name === 'block') {
+                var _block = generate_block('grass_block');
+                _block.setPos(results[0].object.getWorldPosition().add(results[0].face.normal.multiplyScalar(0.5)));
+                _player.model.root.parent.add(_block.cube);
+                _player.crafts.push(_block.cube);
+                console.log('should be there ', _block.cube.position);
+            }
+        }
+
+        event.cancelBubble = true
+        event.returnValue = false;
+        return false; //remove context menu
     };
-    this.rightClick = function(evt) {};
 
-    this.keyHandle = function(delta, now) {
+    this.stateHandle = function(delta, now) {
 
         _object = this.model.root;
         _state = this.state;
@@ -120,13 +152,16 @@ var player = function(url_texture, _camera) {
 
         var height = 0;
         if ((this.jump_time < this.jump_duration / 2) && this.jumping) {
+            this.state.jump = 'jumping';
             height = +this.speed / 2 * delta;
             this.jump_time += 1;
         } else if ((this.jump_time < this.jump_duration) && this.jumping) {
+            this.state.jump = 'falling';
             this.body_anims.start('fall');
             height = -this.speed / 2 * delta;
             this.jump_time += 1;
         } else {
+            this.state.jump = '';
             this.jumping = false;
             this.jump_time = 0;
         }
@@ -185,9 +220,45 @@ var player = function(url_texture, _camera) {
 
     };
 
+    this.collisionDectect = function() {
+        var vertices = [];
+        vertices = vertices.concat(this.model.legL.geometry.vertices);
+        vertices = vertices.concat(this.model.legR.geometry.vertices);
+        for (var v_index = 0; v_index < vertices.length; v_index++) {
+            var local_v = vertices[v_index];
+            var global_v = local_v.applyMatrix4(this.model.root.matrix);
+            var direction_vector = global_v.sub(this.model.root.position);
+
+            var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
+            var collision_results = ray.intersectObjects(this.crafts);
+            if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
+                for (obj of collision_results) {
+                    if (this.state.jump === 'falling' &&
+                        obj.object.position.y >= this.model.root.position.y - 0.75) {
+                        this.state.jump = '';
+                        this.jumping = false;
+                        this.jump_time = 0;
+                        console.log('jump collision detected');
+                        return;
+                    }
+                    if (this.state.forward && obj.object.position.y >= this.model.root.position.y - 0.75) {
+                        this.state.forward = '';
+                        console.log('forward collision detected');
+                        return;
+                    }
+                    if (this.state.backward && obj.object.position.y >= this.model.root.position.y - 0.75) {
+                        this.state.backward = '';
+                        console.log('backward collision detected');
+                        return;
+                    }
+                }
+            }
+        }
+    };
+
     this.update = function(delta, now) {
-        //console.log(this.model.root.position.y, this.jump_time);
-        this.keyHandle(delta, now);
+        this.collisionDectect();
+        this.stateHandle(delta, now);
         this.head_anims.update(delta, now);
         this.body_anims.update(delta, now);
         this.camera.update(delta, now);
