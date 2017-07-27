@@ -52,6 +52,15 @@ var player = function(url_texture, _camera, crafts) {
     cobble_stone.cube.scale.set(0.01, 0.01, 0.01);
     cobble_stone.cube.position.set(-0.026, 0.04, 0.1);
     cobble_stone.cube.rotation.set(Math.PI / 8, Math.PI / 4, 0);
+    
+    var spawn_egg_geo = new THREE.PlaneGeometry(0.01, 0.01);
+    var spawn_egg_material = new THREE.MeshBasicMaterial({
+        map: THREE.ImageUtils.loadTexture("resource/spawn_egg.png"),
+        color: 0xffffff
+    });
+    var spawn_egg = new THREE.Mesh(spawn_egg_geo, spawn_egg_material);
+    this.widget.add(spawn_egg);
+    spawn_egg.position.set(-0.013, 0.04, 0.1);
 
     var widgets_light_geo = new THREE.PlaneGeometry(0.02, 0.02);
     var widgets_light_material = new THREE.MeshBasicMaterial({
