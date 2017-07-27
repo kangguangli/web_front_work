@@ -7,6 +7,7 @@ var player = function(url_texture, _camera, crafts) {
     this.head_anims.start('still');
 
     this.crafts = crafts;
+    this.monsters = [];
 
     this.keymap = {
         D: 68,
@@ -62,7 +63,7 @@ var player = function(url_texture, _camera, crafts) {
 
     this.camera = new PerspectiveControl(_camera, this);
     this.camera.camera.add(this.widget);
-    this.selections = ['grass_block', 'log_oak', 'cobble_stone'];
+    this.selections = ['grass_block', 'log_oak', 'cobble_stone', 'zombie'];
     this.selected = 0;
 
     this.state = {};
@@ -141,7 +142,6 @@ var player = function(url_texture, _camera, crafts) {
         var results = raycaster.intersectObjects(_player.crafts);
         if (results.length > 0 && results[0].distance < 5) {
             if (results[0].object.name === 'block') {
-                console.log('remove');
                 _player.model.root.parent.remove(results[0].object);
                 var index;
                 for (index = 0; index < _player.crafts.length; index++)
@@ -154,20 +154,22 @@ var player = function(url_texture, _camera, crafts) {
 
     };
     this.rightClick = function(event) {
-        console.log('right_click');
         var distance = 5;
 
         var raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2(0, 0), _player.camera.root);
         var results = raycaster.intersectObjects(_player.crafts);
         if (results.length > 0 && results[0].distance < 5) {
-            console.log('results[0]: ', results[0].object.name);
-            if (results[0].object.name === 'block' && _player.selected < _player.selections.length) {
+            if (results[0].object.name === 'block' && _player.selected < _player.selections.length &&
+                _player.selections[_player.selected] !== 'zombie') {
                 var _block = generate_block(_player.selections[_player.selected]);
                 _block.setPos(results[0].object.getWorldPosition().add(results[0].face.normal.normalize().multiplyScalar(0.5)));
                 _player.model.root.parent.add(_block.cube);
                 _player.crafts.push(_block.cube);
-                console.log('should be there ', _block.cube);
+            } else if (_player.selected < _player.selections.length) {
+                var _zombie = generate_zombie(results[0].object.position.clone(), crafts);
+                _player.monsters.push(_zombie);
+                _player.model.root.parent.add(_zombie.model.root);
             }
         }
 
@@ -205,7 +207,7 @@ var player = function(url_texture, _camera, crafts) {
                 break;
             case 'jumping':
                 if (this.jump_time < this.jump_duration) {
-                    dis.y = 0.75 / this.jump_duration;
+                    dis.y = 0.70 / this.jump_duration;
                     this.jump_time += 1;
                     if (this.state.forward) {
                         this.state.forward_jump = 'jump';
@@ -219,6 +221,8 @@ var player = function(url_texture, _camera, crafts) {
                 }
                 break;
             case 'fall':
+                var willStop = 0;
+                var target_block = null;
                 var vertices = [];
                 vertices = vertices.concat(this.model.legL.geometry.vertices);
                 vertices = vertices.concat(this.model.legR.geometry.vertices);
@@ -230,12 +234,33 @@ var player = function(url_texture, _camera, crafts) {
                     var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
                     var collision_results = ray.intersectObjects(this.crafts);
                     if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
-                        if (collision_results[0].object.position.y + 0.30 > this.model.root.position.y) {
-                            console.log(collision_results[0].object.position.y + 0.25, this.model.root.position.y);
-                            this.state.jump = '';
-                            this.model.root.position.y = collision_results[0].object.position.y + 0.25;
-                            return;
+                        for (obj of collision_results) {
+                            if (obj.distance >= direction_vector.length())
+                                continue;
+                            if (obj.object.position.y + 0.30 > this.model.root.position.y) {
+                                if (obj.object.position.y > this.model.root.position.y) {
+                                    willStop = -1;
+                                    break;
+                                }
+                                willStop = 1;
+                                target_block = obj.object;
+                            }
                         }
+                        if (willStop < 0) break;
+                    }
+                }
+                if (willStop > 0) {
+                    var thingInTop = false;
+                    for (var obj of this.crafts) {
+                        if (obj.position.equals(target_block.position.clone().add(new THREE.Vector3(0, 0.5, 0)))) {
+                            thingInTop = true;
+                            break;
+                        }
+                    }
+                    if (!thingInTop) {
+                        this.state.jump = '';
+                        this.model.root.position.y = target_block.position.y + 0.25;
+                        return;
                     }
                 }
                 if (this.model.root.position.y > 0) {
@@ -272,8 +297,54 @@ var player = function(url_texture, _camera, crafts) {
 
     this.collisionDectect = function() {
 
-        var willFall = true;
+        function detect(_mesh) {
+            for (var v_index = 0; v_index < _mesh.geometry.vertices.length; v_index++) {
+                var local_v = _mesh.geometry.vertices[v_index];
+                var global_v = local_v.clone().applyMatrix4(_mesh.matrixWorld);
+                var direction_vector = global_v.sub(_mesh.getWorldPosition());
 
+                var ray = new THREE.Raycaster(_mesh.getWorldPosition(), direction_vector.clone().normalize());
+                var collision_results = ray.intersectObjects(_player.crafts);
+                if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
+                    for (obj of collision_results) {
+                        if (obj.distance >= direction_vector.length())
+                            continue;
+                        var forward = new THREE.Vector3(0, 0, 1);
+                        forward.applyMatrix4(new THREE.Matrix4().makeRotationY(_player.model.root.rotation.y));
+                        var dir = obj.object.position.clone().sub(_player.model.root.position);
+                        dir.y = 0;
+                        var isFront = dir.dot(forward);
+                        isFront = (isFront > 0) ? true : false;
+
+                        if ((_player.state.jump === 'jump' || _player.state.jump === 'jumping') &&
+                            obj.object.position.y - 0.20 > _player.model.root.position.y + 1) {
+                            _player.state.jump = 'fall';
+                            return;
+                        }
+
+                        if (_player.state.forward && isFront &&
+                            obj.object.position.y - 0.20 > _player.model.root.position.y &&
+                            obj.object.position.y - 0.20 < _player.model.root.position.y + 1) {
+                            _player.state.forward = '';
+                            return;
+                        }
+                        if (_player.state.backward && !isFront &&
+                            obj.object.position.y >= _player.model.root.position.y + 0.20 &&
+                            obj.object.position.y - 0.20 < _player.model.root.position.y + 1) {
+                            _player.state.backward = '';
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        detect(this.model.legL);
+        detect(this.model.legR);
+        detect(this.model.body);
+        detect(this.model.head);
+
+        var willFall = true;
         var vertices = [];
         vertices = vertices.concat(this.model.legL.geometry.vertices);
         vertices = vertices.concat(this.model.legR.geometry.vertices);
@@ -281,9 +352,10 @@ var player = function(url_texture, _camera, crafts) {
         vertices = vertices.concat(this.model.head.geometry.vertices);
         // vertices = vertices.concat(this.model.armL.geometry.vertices);
         // vertices = vertices.concat(this.model.armR.geometry.vertices);
+
         for (var v_index = 0; v_index < vertices.length; v_index++) {
             var local_v = vertices[v_index];
-            var global_v = local_v.applyMatrix4(this.model.root.matrix);
+            var global_v = local_v.clone().applyMatrix4(this.model.root.matrix);
             var direction_vector = global_v.sub(this.model.root.position);
 
             var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
@@ -292,33 +364,17 @@ var player = function(url_texture, _camera, crafts) {
                 for (obj of collision_results) {
                     if (obj.distance >= direction_vector.length())
                         continue;
-                    var forward = new THREE.Vector3(0, 0, 1);
-                    forward.applyMatrix4(new THREE.Matrix4().makeRotationY(_player.model.root.rotation.y));
-                    var dir = obj.object.position.clone().sub(_player.model.root.position);
-                    dir.y = 0;
-                    var isFront = dir.dot(forward);
-                    isFront = (isFront > 0) ? true : false;
+
                     if (this.state.jump || obj.object.position.y + 0.25 <= this.model.root.position.y)
                         willFall = false;
-
-                    if (this.state.forward && isFront &&
-                        obj.object.position.y - 0.20 > this.model.root.position.y) {
-                        this.state.forward = '';
-                        console.log('f', obj.object.name);
-                        return;
-                    }
-                    if (this.state.backward && !isFront &&
-                        obj.object.position.y >= this.model.root.position.y + 0.20) {
-                        this.state.backward = '';
-                        console.log('b');
-                        return;
-                    }
                 }
             }
         }
 
-        if (willFall && this.model.root.position.y > 0 && !this.state.jump)
+        if (willFall && this.model.root.position.y > 0 && !this.state.jump) {
             this.state.jump = 'fall';
+        }
+
     };
 
     this.update = function(delta, now) {
@@ -327,6 +383,10 @@ var player = function(url_texture, _camera, crafts) {
         this.head_anims.update(delta, now);
         this.body_anims.update(delta, now);
         this.camera.update(delta, now);
+
+        for (var mon of this.monsters) {
+            mon.update(delta, now);
+        }
     };
 
     document.body.addEventListener('keyup', this.keyUp);
