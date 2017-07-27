@@ -5,11 +5,14 @@ function init() {
 
     document.getElementsByTagName('body')[0].appendChild(renderer.domElement);
 
-    renderer.setClearColor(0x000000);
+    renderer.setClearColor(0xbfd1e5);
 
     var onRenderFcts = [];
     var scene = new THREE.Scene();
     var crafts = [];
+
+    var ambientLight = new THREE.AmbientLight(0xcccccc);
+    scene.add(ambientLight);
 
     var grass = generate_block('grass_block');
     scene.add(grass.cube);
@@ -24,6 +27,23 @@ function init() {
     onRenderFcts.push(function(delta, now) {
         character.update(delta, now);
     });
+
+    var sky_geo = new THREE.PlaneGeometry(8, 8);
+    var sky_material = new THREE.MeshBasicMaterial({
+        map: THREE.ImageUtils.loadTexture("resource/sun1.png"),
+    });
+    var sky = new THREE.Mesh(sky_geo, sky_material);
+    sky.position.set(0, 0, 500);
+    var directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    scene.add(directionalLight);
+    onRenderFcts.push(function(delta, now) {
+        var angle = (now % 30) / 30 * Math.PI * 2;
+        sky.position.set(0, 100 * Math.sin(angle), 100 * Math.cos(angle));
+        sky.lookAt(character.model.root.position);
+        directionalLight.position.set(0, 100 * Math.sin(angle), 100 * Math.cos(angle));
+        directionalLight.lookAt(character.model.root.position);
+    });
+    scene.add(sky);
 
     onRenderFcts.push(function() {
         renderer.render(scene, character.camera.root);

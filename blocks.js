@@ -15,11 +15,11 @@ for (var i = 0; i < 2; i++)
     grass_block_materials.push(new THREE.MeshBasicMaterial({
         map: THREE.ImageUtils.loadTexture('resource/grass_side.png'),
     }));
-grass_block_materials.push(new THREE.MeshBasicMaterial({
+grass_block_materials.push(new THREE.MeshPhongMaterial({
     map: THREE.ImageUtils.loadTexture('resource/grass_top.png'),
     color: 0x7FC14E,
 }));
-grass_block_materials.push(new THREE.MeshBasicMaterial({
+grass_block_materials.push(new THREE.MeshPhongMaterial({
     map: THREE.ImageUtils.loadTexture('resource/dirt.png'),
 }));
 
@@ -56,5 +56,7 @@ var generate_block = function(name) {
             return new blocks(log_oak_materials, 'log_oak');
         case 'cobble_stone':
             return new blocks(cobble_stone_materials, 'cobble_stone');
+        default:
+            return undefined;
     };
 }

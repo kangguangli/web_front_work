@@ -26,7 +26,44 @@ var player = function(url_texture, _camera, crafts) {
 
     this.model.root.position.set(0, 0, 0);
     this.model.head.add(_camera);
+
+    var widget_geo = new THREE.PlaneGeometry(0.2, 0.02);
+    var widget_material = new THREE.MeshBasicMaterial({
+        map: THREE.ImageUtils.loadTexture("resource/widgets.png"),
+    });
+    this.widget = new THREE.Mesh(widget_geo, widget_material);
+    this.widget.position.set(0, -0.1, -0.25);
+
+    var grass_icon = generate_block('grass_block');
+    this.widget.add(grass_icon.cube);
+    grass_icon.cube.scale.set(0.01, 0.01, 0.01);
+    grass_icon.cube.position.set(-0.053, 0.04, 0.1);
+    grass_icon.cube.rotation.set(Math.PI / 8, Math.PI / 4, 0);
+
+    var log_oak = generate_block('log_oak');
+    this.widget.add(log_oak.cube);
+    log_oak.cube.scale.set(0.01, 0.01, 0.01);
+    log_oak.cube.position.set(-0.040, 0.04, 0.1);
+    log_oak.cube.rotation.set(Math.PI / 8, Math.PI / 4, 0);
+
+    var cobble_stone = generate_block('cobble_stone');
+    this.widget.add(cobble_stone.cube);
+    cobble_stone.cube.scale.set(0.01, 0.01, 0.01);
+    cobble_stone.cube.position.set(-0.026, 0.04, 0.1);
+    cobble_stone.cube.rotation.set(Math.PI / 8, Math.PI / 4, 0);
+
+    var widgets_light_geo = new THREE.PlaneGeometry(0.02, 0.02);
+    var widgets_light_material = new THREE.MeshBasicMaterial({
+        map: THREE.ImageUtils.loadTexture("resource/widgets_light.png"),
+    });
+    this.widgets_light = new THREE.Mesh(widgets_light_geo, widgets_light_material);
+    this.widgets_light.position.set(-0.088, 0, 0);
+    this.widget.add(this.widgets_light);
+
     this.camera = new PerspectiveControl(_camera, this);
+    this.camera.camera.add(this.widget);
+    this.selections = ['grass_block', 'log_oak', 'cobble_stone'];
+    this.selected = 0;
 
     this.state = {};
     this.speed = 2;
@@ -125,12 +162,12 @@ var player = function(url_texture, _camera, crafts) {
         var results = raycaster.intersectObjects(_player.crafts);
         if (results.length > 0 && results[0].distance < 5) {
             console.log('results[0]: ', results[0].object.name);
-            if (results[0].object.name === 'block') {
-                var _block = generate_block('grass_block');
-                _block.setPos(results[0].object.getWorldPosition().add(results[0].face.normal.multiplyScalar(0.5)));
+            if (results[0].object.name === 'block' && _player.selected < _player.selections.length) {
+                var _block = generate_block(_player.selections[_player.selected]);
+                _block.setPos(results[0].object.getWorldPosition().add(results[0].face.normal.normalize().multiplyScalar(0.5)));
                 _player.model.root.parent.add(_block.cube);
                 _player.crafts.push(_block.cube);
-                console.log('should be there ', _block.cube.position);
+                console.log('should be there ', _block.cube);
             }
         }
 
@@ -138,6 +175,14 @@ var player = function(url_texture, _camera, crafts) {
         event.returnValue = false;
         return false; //remove context menu
     };
+
+    this.mouseScroll = function(event) {
+        if (event.wheelDelta < 0)
+            _player.selected = (_player.selected + 1) % 9;
+        else
+            _player.selected = (_player.selected + 8) % 9;
+        _player.widgets_light.position.x = -0.088 + (0.022 * _player.selected);
+    }
 
     this.stateHandle = function(delta, now) {
 
@@ -148,8 +193,6 @@ var player = function(url_texture, _camera, crafts) {
 
         dis = {};
         dis.x = dis.y = dis.z = 0;
-
-
 
         switch (this.state.jump) {
             case 'jump':
@@ -187,7 +230,7 @@ var player = function(url_texture, _camera, crafts) {
                     var ray = new THREE.Raycaster(this.model.root.getWorldPosition(), direction_vector.clone().normalize());
                     var collision_results = ray.intersectObjects(this.crafts);
                     if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
-                        if (collision_results[0].object.position.y + 0.25 >= this.model.root.position.y) {
+                        if (collision_results[0].object.position.y + 0.30 > this.model.root.position.y) {
                             console.log(collision_results[0].object.position.y + 0.25, this.model.root.position.y);
                             this.state.jump = '';
                             this.model.root.position.y = collision_results[0].object.position.y + 0.25;
@@ -236,8 +279,8 @@ var player = function(url_texture, _camera, crafts) {
         vertices = vertices.concat(this.model.legR.geometry.vertices);
         vertices = vertices.concat(this.model.body.geometry.vertices);
         vertices = vertices.concat(this.model.head.geometry.vertices);
-        vertices = vertices.concat(this.model.armL.geometry.vertices);
-        vertices = vertices.concat(this.model.armR.geometry.vertices);
+        // vertices = vertices.concat(this.model.armL.geometry.vertices);
+        // vertices = vertices.concat(this.model.armR.geometry.vertices);
         for (var v_index = 0; v_index < vertices.length; v_index++) {
             var local_v = vertices[v_index];
             var global_v = local_v.applyMatrix4(this.model.root.matrix);
@@ -247,6 +290,8 @@ var player = function(url_texture, _camera, crafts) {
             var collision_results = ray.intersectObjects(this.crafts);
             if (collision_results.length > 0 && collision_results[0].distance < direction_vector.length()) {
                 for (obj of collision_results) {
+                    if (obj.distance >= direction_vector.length())
+                        continue;
                     var forward = new THREE.Vector3(0, 0, 1);
                     forward.applyMatrix4(new THREE.Matrix4().makeRotationY(_player.model.root.rotation.y));
                     var dir = obj.object.position.clone().sub(_player.model.root.position);
@@ -257,13 +302,13 @@ var player = function(url_texture, _camera, crafts) {
                         willFall = false;
 
                     if (this.state.forward && isFront &&
-                        obj.object.position.y - 0.25 >= this.model.root.position.y) {
+                        obj.object.position.y - 0.20 > this.model.root.position.y) {
                         this.state.forward = '';
-                        console.log('f');
+                        console.log('f', obj.object.name);
                         return;
                     }
                     if (this.state.backward && !isFront &&
-                        obj.object.position.y >= this.model.root.position.y + 0.25) {
+                        obj.object.position.y >= this.model.root.position.y + 0.20) {
                         this.state.backward = '';
                         console.log('b');
                         return;
@@ -288,6 +333,7 @@ var player = function(url_texture, _camera, crafts) {
     document.body.addEventListener('keydown', this.keyRealease);
     document.body.addEventListener('click', this.leftClick);
     document.body.addEventListener('contextmenu', this.rightClick);
+    document.body.addEventListener('mousewheel', this.mouseScroll);
 }
 
 
